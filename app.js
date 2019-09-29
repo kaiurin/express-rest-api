@@ -60,7 +60,10 @@ app.post("/signup", urlencodedParser, function (request, response) {
 			}
 		});
 	} else {
-		response.sendStatus(400);
+		response.json({
+			status: 400,
+			message: 'Invalid login format!'
+		})
 	}
 });
 
@@ -103,7 +106,10 @@ app.post("/signin", urlencodedParser, function (request, response) {
 app.get("/latency", verifyToken, function (request, response) {
 	jwt.verify(request.token, secretKey, (err) => {
 		if (err) {
-			response.status(403).send("Token didn't verified!");
+			response.json({
+				status: 403,
+				err
+			});
 		} else {
 			checkAndUpdateToken(request.token, (error, result) => {
 				if (error) {
@@ -143,7 +149,10 @@ app.get("/latency", verifyToken, function (request, response) {
 app.get("/info", verifyToken, function (request, response) {
 	jwt.verify(request.token, secretKey, (err) => {
 		if (err) {
-			response.status(403).send("Token didn't verified!");
+			response.json({
+				status: 403,
+				err
+			});
 		} else {
 			checkAndUpdateToken(request.token, (error, result) => {
 				if (error) {
@@ -178,7 +187,10 @@ app.get("/info", verifyToken, function (request, response) {
 app.get("/logout", verifyToken, function (request, response) {
 	jwt.verify(request.token, secretKey, (err) => {
 		if (err) {
-			response.status(403).send("Token didn't verified!");
+			response.json({
+				status: 403,
+				err
+			});
 		} else {
 			checkAndUpdateToken(request.token, (error, result) => {
 				if (error) {

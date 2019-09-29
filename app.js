@@ -4,9 +4,10 @@ const bodyParser = require('body-parser');
 const db = require('./db/db');
 const jwt = require('jsonwebtoken');
 const req = require('request');
-
 const secretKey = 'kaiurin';
 const urlencodedParser = bodyParser.urlencoded({extended: false});
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
 
 app.use(function (request, response, next) {
 	response.header("Access-Control-Allow-Origin", "*");
@@ -23,7 +24,7 @@ app.post("/signup", urlencodedParser, function (request, response) {
 		db.query('SELECT id FROM accounts WHERE id = ?', [id], function (err, res) {
 			if (err) {
 				response.json({
-					status: 400,
+					status: 500,
 					err
 				})
 			} else if (res.length) {
@@ -31,32 +32,41 @@ app.post("/signup", urlencodedParser, function (request, response) {
 					message: 'ID already used',
 				})
 			} else {
-				db.query('INSERT INTO accounts (id, password) VALUES(?, ?)', [id, password], function (err) {
+				bcrypt.hash(password, saltRounds, function (err, hash) {
 					if (err) {
 						response.json({
-							status: 400,
+							status: 500,
 							err
 						})
 					} else {
-						jwt.sign({id}, secretKey, (err, token) => {
-							if (err) return response.json({err});
-							let timestamp = Math.floor(Date.now() / 1000) + (60 * 10);
-							db.query('INSERT INTO tokens (token, timestamp, id) VALUES(?, ?, ?)', [token, timestamp, id], function (err) {
-								if (err) {
-									response.json({
-										status: 400,
-										err
-									})
-								} else {
-									response.json({
-										message: 'You are successfully registered!',
-										token
-									})
-								}
-							});
-						});
+						db.query('INSERT INTO accounts (id, password) VALUES(?, ?)', [id, hash], function (err) {
+							if (err) {
+								response.json({
+									status: 500,
+									err
+								})
+							} else {
+								jwt.sign({id}, secretKey, (err, token) => {
+									if (err) return response.json({err});
+									let timestamp = Math.floor(Date.now() / 1000) + (60 * 10);
+									db.query('INSERT INTO tokens (token, timestamp, id) VALUES(?, ?, ?)', [token, timestamp, id], function (err) {
+										if (err) {
+											response.json({
+												status: 500,
+												err
+											})
+										} else {
+											response.json({
+												message: 'You are successfully registered!',
+												token
+											})
+										}
+									});
+								});
+							}
+						})
 					}
-				})
+				});
 			}
 		});
 	} else {
@@ -71,29 +81,43 @@ app.post("/signin", urlencodedParser, function (request, response) {
 	if (!request.body) return response.sendStatus(400);
 	let id = request.body.id;
 	let password = request.body.password;
-	db.query('SELECT id ,password FROM accounts WHERE id = ? AND password = ?', [id, password], function (err, res) {
+	db.query('SELECT id, password FROM accounts WHERE id = ?', [id], function (err, res) {
 		if (err) {
 			response.json({
-				status: 400,
+				status: 500,
 				err
 			})
 		} else if (res.length) {
-			jwt.sign({id}, secretKey, (err, token) => {
-				if (err) return response.json({err});
-				let timestamp = Math.floor(Date.now() / 1000) + (60 * 10);
-				db.query('INSERT INTO tokens (token, timestamp, id) VALUES(?, ?, ?)', [token, timestamp, id], function (err) {
-					if (err) {
-						response.json({
-							status: 400,
-							err
-						})
-					} else {
-						response.json({
-							message: 'You are successfully authorized!',
-							token
-						})
-					}
-				});
+			let dbHash = res[0].password;
+			bcrypt.compare(password, dbHash, function (err, res) {
+				if (err) {
+					response.json({
+						status: 500,
+						err
+					})
+				} else if (res) {
+					jwt.sign({id}, secretKey, (err, token) => {
+						if (err) return response.json({err});
+						let timestamp = Math.floor(Date.now() / 1000) + (60 * 10);
+						db.query('INSERT INTO tokens (token, timestamp, id) VALUES(?, ?, ?)', [token, timestamp, id], function (err) {
+							if (err) {
+								response.json({
+									status: 500,
+									err
+								})
+							} else {
+								response.json({
+									message: 'You are successfully authorized!',
+									token
+								})
+							}
+						});
+					});
+				} else {
+					response.json({
+						message: 'Wrong login or password!'
+					});
+				}
 			});
 		} else {
 			response.json({
@@ -107,14 +131,14 @@ app.get("/latency", verifyToken, function (request, response) {
 	jwt.verify(request.token, secretKey, (err) => {
 		if (err) {
 			response.json({
-				status: 403,
+				status: 500,
 				err
 			});
 		} else {
 			checkAndUpdateToken(request.token, (error, result) => {
 				if (error) {
 					response.json({
-						status: 400,
+						status: 500,
 						error
 					});
 				} else if (!result) {
@@ -130,7 +154,7 @@ app.get("/latency", verifyToken, function (request, response) {
 					}, function (err, res) {
 						if (err) {
 							response.json({
-								status: 400,
+								status: 500,
 								err,
 							});
 						} else {
@@ -157,7 +181,7 @@ app.get("/info", verifyToken, function (request, response) {
 			checkAndUpdateToken(request.token, (error, result) => {
 				if (error) {
 					response.json({
-						status: 400,
+						status: 500,
 						error
 					});
 				} else if (!result) {
@@ -169,7 +193,7 @@ app.get("/info", verifyToken, function (request, response) {
 					db.query('SELECT id FROM tokens WHERE token = ?', [request.token], function (err, res) {
 						if (err) {
 							response.json({
-								status: 400,
+								status: 500,
 								err
 							})
 						} else {
@@ -195,7 +219,7 @@ app.get("/logout", verifyToken, function (request, response) {
 			checkAndUpdateToken(request.token, (error, result) => {
 				if (error) {
 					response.json({
-						status: 400,
+						status: 500,
 						error
 					});
 				} else if (!result) {
@@ -204,10 +228,10 @@ app.get("/logout", verifyToken, function (request, response) {
 						message: 'Token has been expired!'
 					});
 				} else {
-					db.query('DELETE FROM tokens WHERE token = ?', [request.token], function (err) {
+					deleteToken(request.token, (err) => {
 						if (err) {
 							response.json({
-								status: 400,
+								status: 500,
 								err
 							})
 						} else {
@@ -215,7 +239,7 @@ app.get("/logout", verifyToken, function (request, response) {
 								message: 'You are successfully logged out!',
 							})
 						}
-					})
+					});
 				}
 			});
 		}
@@ -234,7 +258,7 @@ function verifyToken(req, res, next) {
 		req.token = bearerToken;
 		next();
 	} else {
-		res.sendStatus(403);
+		res.sendStatus(401);
 	}
 }
 

@@ -1,8 +1,8 @@
 # REST API on Express
 
-Service with REST API with authorization.
+Service with REST API.
 You can make **POST** request - _/signup; /signin_, and
-you can make **GET** request - _/latency; /info; /logout_
+**GET** request - _/latency; /info; /logout_
 
 # Getting started
 
